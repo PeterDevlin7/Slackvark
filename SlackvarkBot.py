@@ -1,5 +1,8 @@
-import sys, configparser, json
+import sys
+import configparser
+import json
 from slackclient import SlackClient
+
 
 class SlackvarkBot:
     def __init__(self):
@@ -15,7 +18,8 @@ class SlackvarkBot:
         while True:
             response = self.client.rtm_read()
             for action in response:
-                print(action)
+                # debug pretty print
+                print(json.dumps(action, sort_keys=False, indent=4), end='\n\n')
                 if "type" in action and action["type"] == "message":
                     response = self.processMessage(action)
                     if response:
@@ -26,20 +30,20 @@ class SlackvarkBot:
         chanObj = self.client.server.channels.find(channel)
         if not chanObj:
             raise Exception("#%s not found in list of available channels." %
-                    channel)
+                            channel)
         chanObj.send_message(message)
 
     def getDirectChannelID(self, username):
         """Returns direct message channel id given username"""
-        imObjects = self.client.api_call(method = "im.list").decode("utf-8")
-        imObjects  = json.loads(imObjects)
+        imObjects = self.client.api_call(method="im.list").decode("utf-8")
+        imObjects = json.loads(imObjects)
         # debug pretty print
         # print(json.dumps(imObjects, sort_keys=False, indent=4))
         if imObjects["ok"]:
             for im in imObjects["ims"]:
                 if im["user"] == username:
                     return im["id"]
- 
+
     def processMessage(self, action):
         command = action["text"].lower().strip()
         if command == "stop":
@@ -57,7 +61,5 @@ if __name__ == "__main__":
 
     slackvark_bot = SlackvarkBot()
     slackvark_bot.connect(bot_token)
-
-    # slackvark_bot.getDirectChannelID("nra1")
 
     slackvark_bot.listen()
