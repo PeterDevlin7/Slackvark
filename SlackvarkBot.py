@@ -1,4 +1,4 @@
-import sys
+import sys, configparser, json
 from slackclient import SlackClient
 
 class SlackvarkBot:
@@ -17,25 +17,47 @@ class SlackvarkBot:
             for action in response:
                 print(action)
                 if "type" in action and action["type"] == "message":
-                    self.process_message(action["text"])
+                    response = self.processMessage(action)
+                    if response:
+                        exit()
 
     def post(self, channel, message):
         channel = channel.lstrip('#')
         chanObj = self.client.server.channels.find(channel)
-
         if not chanObj:
             raise Exception("#%s not found in list of available channels." %
                     channel)
-
         chanObj.send_message(message)
 
-    def process_message(self, command):
-        if command.lower().strip() == "hello":
-            self.post("test", "hello there!")
+    def getDirectChannelID(self, username):
+        """Returns direct message channel id given username"""
+        imObjects = self.client.api_call(method = "im.list").decode("utf-8")
+        imObjects  = json.loads(imObjects)
+        # debug pretty print
+        # print(json.dumps(imObjects, sort_keys=False, indent=4))
+        if imObjects["ok"]:
+            for im in imObjects["ims"]:
+                if im["user"] == username:
+                    return im["id"]
+ 
+    def processMessage(self, action):
+        command = action["text"].lower().strip()
+        if command == "stop":
+            self.post(action["channel"], "I will stop listening now.")
+            return 1
+        elif command == "hello":
+            self.post(action["channel"], "hello there!")
+        elif command == "slackvark":
+            self.post(self.getDirectChannelID(action["user"]), "hello")
 
 if __name__ == "__main__":
-    bot_token = ""
+    config = configparser.ConfigParser()
+    config.read("creds.cfg")
+    bot_token = config["SLACK"]["token"]
+
     slackvark_bot = SlackvarkBot()
     slackvark_bot.connect(bot_token)
+
+    # slackvark_bot.getDirectChannelID("nra1")
 
     slackvark_bot.listen()
