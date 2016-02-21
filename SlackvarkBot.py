@@ -3,7 +3,6 @@ import configparser
 import json
 from slackclient import SlackClient
 
-
 class SlackvarkBot:
 
     def __init__(self, bot_token, human_token):
@@ -11,6 +10,7 @@ class SlackvarkBot:
         self.username = None
         self.bot_token = bot_token
         self.human_token = human_token
+        self.in_menu = False
 
     # inititalize client and open connection
     def connect(self, token):
@@ -32,6 +32,7 @@ class SlackvarkBot:
                 elif "type" in action and action["type"] == "team_join":
                     self.post(self.openDirectChannel(action["user"]["id"]),
                             action["user"]["id"])
+                        self.in_menu = False
 
     # post message to channel
     # params channel - string; message - string
@@ -130,17 +131,18 @@ class SlackvarkBot:
 
         # rudimentary menu follows. will likely be scrapped as bot developes
         if command == "hello":  # bot listens for "hello"
+            self.in_menu = True
             # post main options
             self.post(action["channel"], "Hi! I am a test build of Slackvark. Please choose from these options:\n \
-                      1. Stop Listening\n \
+                      1. Exit menu\n \
                       2. Send a direct message\n \
                       3. Create a new channel")
-        elif command == "1":
+        elif self.in_menu and command == "1":
             return 1  # signals listener to quit program
-        elif command == "2":
+        elif self.in_menu and command == "2":
             self.post(self.getDirectChannelID(
                 action["user"]), "hello")  # messages "hello" via DM
-        elif command == "3":
+        elif self.in_menu and command == "3":
             self.post(
                 action["channel"], "Awesome. Who would you like to invite?")
                       # prompts for list of users
@@ -170,9 +172,10 @@ class SlackvarkBot:
             # post to newly-created channel
             self.post(self.createNewChannel(usernameList, channelName),
                       "Hello again! I've created this channel for you.\n")
-
-        else:
-            self.post(action["channel"], "Invalid selection.")
+        #This will stop the invalid selection bug where it keeps saying it in chat
+        elif self.in_menu:
+            self.post(action["channel"], "invalid selection.")
+            print("\n\n\n\n" + command + "\n\n\n\n")
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
