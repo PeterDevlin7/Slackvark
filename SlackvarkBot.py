@@ -24,12 +24,14 @@ class SlackvarkBot:
             response = self.client.rtm_read()
             for action in response:
                 # debug pretty print
-                print(
-                    json.dumps(action, sort_keys=False, indent=4), end='\n\n')
+                print(json.dumps(action, sort_keys=False, indent=4), end='\n\n')
                 if "type" in action and action["type"] == "message":
                     response = self.processMessage(action)
                     if response:
                         exit()
+                elif "type" in action and action["type"] == "team_join":
+                    self.post(self.openDirectChannel(action["user"]["id"]),
+                            action["user"]["id"])
 
     # post message to channel
     # params channel - string; message - string
@@ -37,9 +39,24 @@ class SlackvarkBot:
         channel = channel.lstrip('#')
         chanObj = self.client.server.channels.find(channel)
         if not chanObj:
-            raise Exception("#%s not found in list of available channels." %
+            raise Exception("%s not found in list of available channels." %
                             channel)
         chanObj.send_message(message)
+
+    # open direct channel
+    # params username - string;
+    # returns channel id
+    def openDirectChannel(self, username):
+        response = self.client.api_call(method="im.open",user=username).decode("utf-8")
+        response = json.loads(response)
+        # debug
+        print(json.dumps(response, sort_keys=False, indent=4), end="\n\n")
+        if response["ok"]:
+            channelID = response["channel"]["id"]
+            print("Direct Message ChannelID Open:", channelID)
+            return channelID
+        else:
+            print("openDirectChannel Error")
 
     # resolve direct channel ID given username
     # params username - string; username to look up
@@ -55,6 +72,7 @@ class SlackvarkBot:
             for im in imObjects["ims"]:
                 if im["user"] == username:  # if found user
                     return im["id"]  # return direct message  channel ID
+        return None
 
     # resolve user ID given username
     # params username - string; username to look up
