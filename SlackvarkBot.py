@@ -47,8 +47,10 @@ class SlackvarkBot:
                     if response:
                         exit()
                 elif "type" in action and action["type"] == "team_join":
-                    self.post(self.openDirectChannel(action["user"]["id"]),
-                            action["user"]["id"])
+                    newDirectChannel = self.openDirectChannel(action["user"]["id"])
+                    self.connect()
+                    # Change message to post on new team member join
+                    self.post(newDirectChannel, "Hello there, welcome to the channel")
                     self.in_menu = False
         while self.inLegalSlack:
             response = self.client.rtm_read()
@@ -91,13 +93,15 @@ class SlackvarkBot:
         response = self.client.api_call(method="im.open",user=username).decode("utf-8")
         response = json.loads(response)
         # debug
-        print(json.dumps(response, sort_keys=False, indent=4), end="\n\n")
+        # print(json.dumps(response, sort_keys=False, indent=4), end="\n\n")
         if response["ok"]:
             channelID = response["channel"]["id"]
-            print("Direct Message ChannelID Open:", channelID)
+            # debug
+            # print("Direct Message ChannelID Open:", channelID)
             return channelID
         else:
-            print("openDirectChannel Error")
+            print("Bad response from im.open")
+            return None
 
 
     def getDirectChannelID(self, username):
@@ -122,7 +126,7 @@ class SlackvarkBot:
                 print("Couldn't find that username in the"
                       "list of open direct message channels")
         else:
-            print("Bad Respone from im.list")
+            print("Bad Response from im.list")
         return None
 
     def getUserID(self, username):
