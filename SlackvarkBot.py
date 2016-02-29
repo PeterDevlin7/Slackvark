@@ -23,11 +23,14 @@ class SlackvarkBot:
         self.inLegalSlack = inLegalSlack
 
 
-    def connect(self):
+    def connect(self, inLegalSlack):
         """
         Connects to the Slack Real Time Messaging (RTM) API.
         """
-        self.client = SlackClient(self.bot_token)
+        if inLegalSlack:
+            self.client = SlackClient(self.human_token)
+        else:
+            self.client = SlackClient(self.bot_token)
         self.client.rtm_connect()
         self.username = self.client.server.username
 
@@ -44,11 +47,9 @@ class SlackvarkBot:
                 print(json.dumps(action, sort_keys=False, indent=4), end='\n\n')
                 if "type" in action and action["type"] == "message":
                     response = self.processMessage(action)
-                    if response:
-                        exit()
                 elif "type" in action and action["type"] == "team_join":
                     newDirectChannel = self.openDirectChannel(action["user"]["id"])
-                    self.connect()
+                    self.connect(False)
                     # Change message to post on new team member join
                     self.post(newDirectChannel, "Hello there, welcome to the channel")
                     self.in_menu = False
@@ -77,6 +78,30 @@ class SlackvarkBot:
                             channel)
         chanObj.send_message(message)
 
+    def readMessage(self, lower=True, strip=True):
+        """
+        Waits for a response and returns the text of the message
+
+        Parameters:
+        ***(username)*** (str) -- username to listen to (not implemented yet)
+        lower (bool) -- specifies if the string is to be set to lowercase
+        strip (bool) -- specifies if the string is to be stripped
+
+        Returns:
+        answer (str) -- the input submitted by users
+        """
+        answer = ""
+        while True:
+            response = self.client.rtm_read()
+            for item in response:
+                if "type" in item and item["type"] == "message":
+                    answer = item["text"]
+                    if lower:
+                      answer = answer.lower()
+                    if strip:
+                      answer = answer.strip()
+                    return answer
+
 
     def openDirectChannel(self, username):
         """
@@ -90,7 +115,7 @@ class SlackvarkBot:
         channelID (str) -- channel id of opened direct message channel
             ex: "Cxxxxxxxx"
         """
-        response = self.client.api_call(method="im.open",user=username).decode("utf-8")
+        response = self.client.api_call(method="im.open",user=username)
         response = json.loads(response)
         # debug
         # print(json.dumps(response, sort_keys=False, indent=4), end="\n\n")
@@ -116,7 +141,7 @@ class SlackvarkBot:
         channelID (str) -- channel id of direct message channel of user
             ex: "Cxxxxxxxx"
         """
-        imObjects = self.client.api_call(method="im.list").decode("utf-8")
+        imObjects = self.client.api_call(method="im.list")
         imObjects = json.loads(imObjects)
         if imObjects["ok"]:
             for im in imObjects["ims"]:
@@ -141,8 +166,7 @@ class SlackvarkBot:
         userID (str) -- user id belonging to param username
             ex: "Uxxxxxxxx"
         """
-        userObjects = self.client.api_call(method="users.list").decode(
-            "utf-8")  # list all users in slack w/API call
+        userObjects = self.client.api_call(method="users.list") # list all users in slack w/API call
         userObjects = json.loads(userObjects)
 
         if userObjects["ok"]:
@@ -170,7 +194,7 @@ class SlackvarkBot:
         username (str) -- username belonging to param userID
             ex: "slackuser1"
         """
-        userObjects = self.client.api_call(method = "users.list").decode("utf-8") # list all users in slack w/API call
+        userObjects = self.client.api_call(method = "users.list") # list all users in slack w/API call
         userObjects = json.loads(userObjects)
 
         if userObjects["ok"]:
@@ -194,7 +218,7 @@ class SlackvarkBot:
         Returns:
         groupID (str) -- groupID belonging to param groupName
         """
-        groupObjects = self.client.api_call(method = "groups.list").decode("utf-8") # list all groups in slack w/API call
+        groupObjects = self.client.api_call(method = "groups.list") # list all groups in slack w/API call
         groupObjects = json.loads(groupObjects)
 
         if groupObjects["ok"]:
@@ -224,23 +248,23 @@ class SlackvarkBot:
         if self.inLegalSlack: botName = "aaron"
         else: botName = "slackvark_bot"
         
-        self.connect(self.human_token)  # switch to human token
+        self.connect(True)  # switch to human token
         groupObject = self.client.api_call(
             method="groups.create", token=human_token, name=groupName)  # create group
 
         # decode group object to resolve ID (needed to add users)
-        groupObject = groupObject.decode("utf-8")
+        groupObject = groupObject
         groupObject = json.loads(groupObject)
   
         if groupObject["ok"]:
             groupId = groupObject["group"]["id"]
         elif groupObject["error"] == 'name_taken':
-            self.connect(self.bot_token) # switch back to bot token
+            self.connect(False) # switch back to bot token
             groupID = self.getGroupID(groupName)
-            self.connect(self.human_token) # switch back to human token
+            self.connect(True) # switch back to human token
 
             groupObject = self.client.api_call(method = "groups.unarchive", token=self.human_token, name=groupID)
-            groupObject = groupObject.decode("utf-8")
+            groupObject = groupObject
             groupObject = json.loads(groupObject)
             if not groupObject["ok"]:
                 print("Bad response from groups.unarchive")
@@ -257,7 +281,7 @@ class SlackvarkBot:
         self.client.api_call(method="groups.invite", token=human_token,
                              channel=groupId, user=self.getUserID(botName))  # invite self
 
-        self.connect(self.bot_token)  # switch back to bot token
+        self.connect(False)  # switch back to bot token
         return groupId
 
 
@@ -279,7 +303,7 @@ class SlackvarkBot:
         usernameList = []
         channelName = ""
 
-        # rudimentary menu follows. will likely be scrapped as bot developes
+        # rudimentary menu follows. will likely be scrapped as bot develops
         if command == "hello":  # bot listens for "hello"
             self.in_menu = True
             # post main options
@@ -289,7 +313,7 @@ class SlackvarkBot:
                       3. Create a new group\n \
                       4. Message the Legal Slack")
         elif self.in_menu and command == "1":
-            return 1  # signals listener to quit program
+            self.in_menu = False
         elif self.in_menu and command == "2":
             self.post(self.getDirectChannelID(
                 action["user"]), "hello")  # messages "hello" via DM
@@ -297,41 +321,16 @@ class SlackvarkBot:
             self.post(
                 action["channel"], "Awesome. Who would you like to invite?")
                       # prompts for list of users
-            condition = True
-            while condition:  # wait for response from user
-                # begin code repeated from listener. This may be a good
-                # candidate for a function. ##
-                response1 = self.client.rtm_read()
-                for item in response1:
-                    if "type" in item and item["type"] == "message":
-                        usernameList = item["text"].strip().split(
-                            " ")  # split on spaces
-                        condition = False
-                # --------------------------- end repeated code --------------------------------- ##
+            usernameList = (self.readMessage()).split()
             self.post(
                 action["channel"], "What would you like to call this channel?")
-            condition = True
-            while condition:
-                # another repeat of above. Nuri has suggested we split the listener into a separate class. \
-                    # perhaps this can be a member function #
-                response2 = self.client.rtm_read()
-                for item in response2:
-                    if "type" in item and item["type"] == "message":
-                        channelName = item["text"].lower().strip()
-                        condition = False
-                # --------------------------- end repeated code --------------------------------- ##
+            channelName = self.readMessage()
             # post to newly-created channel
             self.post(self.createNewGroup(usernameList, channelName),
                       "Hello again! I've created this channel for you.\n")
         elif self.in_menu and command == "4":
             self.post(action["channel"], "Please give a channel name.")
-            condition = True
-            while condition:
-                response2 = self.client.rtm_read()
-                for item in response2:
-                    if "type" in item and item["type"] == "message":
-                        channelName = item["text"].lower().strip()
-                        condition = False
+            channelName = self.readMessage()
             self.post(self.createNewGroup([], channelName), "Hello again! I've created this channel for you.\n")
             
             payload = {"text" : self.getUserName(item["user"]) + " " + channelName + " " + "T0K6H0Q8N/B0NCLNQNQ/1W8CAOsVNkZwMtq1gmWyhBfy", "channel" : "@aaron", "username" : "temp"}
@@ -340,8 +339,8 @@ class SlackvarkBot:
             
             to_send = ""
             while True:
-                response3 = self.client.rtm_read()
-                for item in response3:
+                response = self.client.rtm_read()
+                for item in response:
                     if "type" in item and item["type"] == "message" and "user" in item and item["user"] != self.getUserID("slackvark_bot") and item["channel"] == self.getGroupID(channelName):
                         to_send = item["text"].lower().strip()
                         payload = {"text" : to_send, "channel" : "#" + channelName, "username" : self.getUserName(item["user"]), "icon_emoji" : ":electric_plug:"}
@@ -384,13 +383,13 @@ if __name__ == "__main__":
     config.read("creds.cfg") # read creds file
     if not inLegalSlack:
         bot_token = config["SLACK"]["token"] # retrieve bot token from creds file
-        human_token = config["PERSON"]["token"] # retrieve human token from creds file
+        human_token = config["PERSON1"]["token"] # retrieve human token from creds file
 
     else:
         bot_token = config["AARON"]["token"]
         human_token = config["PERSON2"]["token"] # retrieve human token from creds file
     
     slackvark_bot = SlackvarkBot(bot_token, human_token, inLegalSlack)
-    slackvark_bot.connect()
+    slackvark_bot.connect(False)
 
     slackvark_bot.listen() # call listener
