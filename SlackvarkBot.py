@@ -4,6 +4,8 @@ import json
 import requests
 from slackclient import SlackClient
 
+import MessageConstants
+
 
 class SlackvarkBot:
 
@@ -49,10 +51,11 @@ class SlackvarkBot:
                     response = self.processMessage(action)
                 elif "type" in action and action["type"] == "team_join":
                     newDirectChannel = self.openDirectChannel(action["user"]["id"])
-                    self.connect(False)
-                    # Change message to post on new team member join
-                    self.post(newDirectChannel, "Hello there, welcome to the channel")
+                    self.connect(False) # need this reconnect to update internal list
+                    self.post(newDirectChannel, MessageConstants.JOIN_CHANNEL)
                     self.in_menu = False
+                elif "type" in action and action["type"] == "group_joined":
+                    self.connect(False)
         while self.inLegalSlack:
             response = self.client.rtm_read()
             for action in response:
@@ -219,6 +222,9 @@ class SlackvarkBot:
         groupID (str) -- groupID belonging to param groupName
         """
         groupObjects = self.client.api_call(method = "groups.list") # list all groups in slack w/API call
+        # may have to comment this out on other OS's, need to figure a better
+        # way to do this with flags maybe
+        groupObjects = groupObjects.decode("utf-8")
         groupObjects = json.loads(groupObjects)
 
         if groupObjects["ok"]:
@@ -253,7 +259,7 @@ class SlackvarkBot:
             method="groups.create", token=human_token, name=groupName)  # create group
 
         # decode group object to resolve ID (needed to add users)
-        groupObject = groupObject
+        groupObject = groupObject.decode("utf-8")
         groupObject = json.loads(groupObject)
   
         if groupObject["ok"]:
@@ -264,7 +270,7 @@ class SlackvarkBot:
             self.connect(True) # switch back to human token
 
             groupObject = self.client.api_call(method = "groups.unarchive", token=self.human_token, name=groupID)
-            groupObject = groupObject
+            groupObject = groupObject.decode("utf-8")
             groupObject = json.loads(groupObject)
             if not groupObject["ok"]:
                 print("Bad response from groups.unarchive")
@@ -307,48 +313,62 @@ class SlackvarkBot:
         if command == "hello":  # bot listens for "hello"
             self.in_menu = True
             # post main options
-            self.post(action["channel"],"Hi! I am a test build of Slackvark. Please choose from these options:\n \
-                      1. Exit menu\n \
-                      2. Send a direct message\n \
-                      3. Create a new group\n \
-                      4. Message the Legal Slack")
+            self.post(action["channel"], MessageConstants.MENU)
         elif self.in_menu and command == "1":
+            self.post(action["channel"], MessageConstants.MENU_OPTION_1)
             self.in_menu = False
         elif self.in_menu and command == "2":
-            self.post(self.getDirectChannelID(
-                action["user"]), "hello")  # messages "hello" via DM
+            self.post(self.getDirectChannelID(action["user"]), "hello")
         elif self.in_menu and command == "3":
-            self.post(
-                action["channel"], "Awesome. Who would you like to invite?")
-                      # prompts for list of users
-            usernameList = (self.readMessage()).split()
-            self.post(
-                action["channel"], "What would you like to call this channel?")
+            self.post(action["channel"], MessageConstants.MENU_OPTION_3)
+            usernameList = self.readMessage().split()
+            self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
             channelName = self.readMessage()
             # post to newly-created channel
             self.post(self.createNewGroup(usernameList, channelName),
-                      "Hello again! I've created this channel for you.\n")
+                      MessageConstants.CREATED_CHANNEL)
         elif self.in_menu and command == "4":
-            self.post(action["channel"], "Please give a channel name.")
+            self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
             channelName = self.readMessage()
-            self.post(self.createNewGroup([], channelName), "Hello again! I've created this channel for you.\n")
+            # self.post(self.createNewGroup([], channelName), MessageConstants.CREATED_CHANNEL)
             
-            payload = {"text" : self.getUserName(item["user"]) + " " + channelName + " " + "T0K6H0Q8N/B0NCLNQNQ/1W8CAOsVNkZwMtq1gmWyhBfy", "channel" : "@aaron", "username" : "temp"}
+            payload = {
+                    "text" : self.getUserName(item["user"]) + " " +\
+                    channelName + " " + "T0K6H0Q8N/B0NCLNQNQ/1W8CAOsVNkZwMtq1gmWyhBfy",
+                    "channel" : "@aaron",
+                    "username" : "temp"
+                    }
             payload = json.JSONEncoder().encode(payload)
-            r = requests.post("https://hooks.slack.com/services/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", data=payload)
+            r = webhookPost(payload)
+            # r = requests.post(
+            #         "https://hooks.slack.com/services/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",
+            #         data=payload
+            #         )
             
             to_send = ""
             while True:
                 response = self.client.rtm_read()
                 for item in response:
-                    if "type" in item and item["type"] == "message" and "user" in item and item["user"] != self.getUserID("slackvark_bot") and item["channel"] == self.getGroupID(channelName):
+                    if "type" in item and item["type"] == "message" and \
+                            "user" in item and item["user"] != self.getUserID("slackvark_bot") and \
+                            item["channel"] == self.getGroupID(channelName):
                         to_send = item["text"].lower().strip()
-                        payload = {"text" : to_send, "channel" : "#" + channelName, "username" : self.getUserName(item["user"]), "icon_emoji" : ":electric_plug:"}
+                        payload = {
+                                "text" : to_send,
+                                "channel" : "#" + channelName,
+                                "username" : self.getUserName(item["user"]),
+                                "icon_emoji" : ":electric_plug:"
+                                }
                         payload = json.JSONEncoder().encode(payload)
-                        r = requests.post("https://hooks.slack.com/services/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", data=payload)
+                        r = webhookPost(payload)
+
         #This will stop the invalid selection bug
         elif self.in_menu:
             self.post(action["channel"], "Invalid Selection.")
+
+    def webhookPost(payload,
+            url="https://hooks.slack.com/services/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"):
+        return requests.post(url, payload)
 
     def processDMLegal(self, action):
         """
@@ -372,7 +392,12 @@ class SlackvarkBot:
             for item in response:
                 if ("type" in item and item["type"] == "message") and ("user" in item and item["user"] != self.getUserID("aaron")): #and item["channel"] == self.getGroupID(commandList[1]):
                     to_send = item["text"].lower().strip()
-                    payload = {"text" : item["text"], "channel" : "#" + commandList[1], "username" : commandList[0], "icon_emoji" : ":electric_plug:"}
+                    payload = {
+                            "text" : item["text"],
+                            "channel" : "#" + commandList[1],
+                            "username" : commandList[0],
+                            "icon_emoji" : ":electric_plug:"
+                            }
                     payload = json.JSONEncoder().encode(payload)
                     r = requests.post(hookURL, data=payload)        
         return
