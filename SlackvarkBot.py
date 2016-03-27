@@ -118,7 +118,7 @@ class SlackvarkBot:
         channelID (str) -- channel id of opened direct message channel
             ex: "Cxxxxxxxx"
         """
-        response = self.client.api_call(method="im.open",user=username)
+        response = self.client.api_call(method="im.open",user=username).decode("utf-8")
         response = json.loads(response)
         # debug
         # print(json.dumps(response, sort_keys=False, indent=4), end="\n\n")
@@ -144,7 +144,7 @@ class SlackvarkBot:
         channelID (str) -- channel id of direct message channel of user
             ex: "Cxxxxxxxx"
         """
-        imObjects = self.client.api_call(method="im.list")
+        imObjects = self.client.api_call(method="im.list").decode("utf-8")
         imObjects = json.loads(imObjects)
         if imObjects["ok"]:
             for im in imObjects["ims"]:
@@ -169,7 +169,7 @@ class SlackvarkBot:
         userID (str) -- user id belonging to param username
             ex: "Uxxxxxxxx"
         """
-        userObjects = self.client.api_call(method="users.list") # list all users in slack w/API call
+        userObjects = self.client.api_call(method="users.list").decode("utf-8") # list all users in slack w/API call
         userObjects = json.loads(userObjects)
 
         if userObjects["ok"]:
@@ -197,7 +197,7 @@ class SlackvarkBot:
         username (str) -- username belonging to param userID
             ex: "slackuser1"
         """
-        userObjects = self.client.api_call(method = "users.list") # list all users in slack w/API call
+        userObjects = self.client.api_call(method = "users.list").decode("utf-8") # list all users in slack w/API call
         userObjects = json.loads(userObjects)
 
         if userObjects["ok"]:
@@ -290,6 +290,10 @@ class SlackvarkBot:
         self.connect(False)  # switch back to bot token
         return groupId
 
+    def webhookPost(self, payload, url=None):
+        if(url is None):
+            url = "https://hooks.slack.com/services/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"
+        return requests.post(url, payload)
 
     # Handler could also be a separate class
     def processMessage(self, action):
@@ -330,16 +334,16 @@ class SlackvarkBot:
         elif self.in_menu and command == "4":
             self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
             channelName = self.readMessage()
-            # self.post(self.createNewGroup([], channelName), MessageConstants.CREATED_CHANNEL)
+            self.post(self.createNewGroup([], channelName), MessageConstants.CREATED_CHANNEL)
             
             payload = {
-                    "text" : self.getUserName(item["user"]) + " " +\
+                    "text" : self.getUserName(action["user"]) + " " +\
                     channelName + " " + "T0K6H0Q8N/B0NCLNQNQ/1W8CAOsVNkZwMtq1gmWyhBfy",
                     "channel" : "@aaron",
                     "username" : "temp"
                     }
             payload = json.JSONEncoder().encode(payload)
-            r = webhookPost(payload)
+            r = self.webhookPost(payload)
             # r = requests.post(
             #         "https://hooks.slack.com/services/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",
             #         data=payload
@@ -360,15 +364,13 @@ class SlackvarkBot:
                                 "icon_emoji" : ":electric_plug:"
                                 }
                         payload = json.JSONEncoder().encode(payload)
-                        r = webhookPost(payload)
+                        r = self.webhookPost(payload)
 
         #This will stop the invalid selection bug
         elif self.in_menu:
             self.post(action["channel"], "Invalid Selection.")
 
-    def webhookPost(payload,
-            url="https://hooks.slack.com/services/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"):
-        return requests.post(url, payload)
+    
 
     def processDMLegal(self, action):
         """
