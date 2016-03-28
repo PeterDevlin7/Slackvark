@@ -21,7 +21,6 @@ class SlackvarkBot:
         self.username = None
         self.bot_token = bot_token
         self.human_token = human_token
-        self.in_menu = False
         self.inLegalSlack = inLegalSlack
 
 
@@ -47,7 +46,8 @@ class SlackvarkBot:
             for action in response:
                 # debug pretty print
                 print(json.dumps(action, sort_keys=False, indent=4), end='\n\n')
-                if "type" in action and action["type"] == "message":
+                if "type" in action and "subtype" not in action and \
+                        action["type"] == "message":
                     response = self.processMessage(action)
                 elif "type" in action and action["type"] == "team_join":
                     newDirectChannel = self.openDirectChannel(action["user"]["id"])
@@ -81,6 +81,7 @@ class SlackvarkBot:
                             channel)
         chanObj.send_message(message)
 
+
     def readMessage(self, lower=True, strip=True):
         """
         Waits for a response and returns the text of the message
@@ -104,6 +105,23 @@ class SlackvarkBot:
                     if strip:
                       answer = answer.strip()
                     return answer
+
+
+    def readMenuSelection(self):
+        """
+        Gives a menu and waits for a response from the user
+
+        Returns:
+        answer (int) -- int representation of user response
+        """
+        while True:
+            response = self.client.rtm_read()
+            for item in response:
+                if "type" in item and item["type"] == "message":
+                    answer = item["text"]
+                    if answer.isdigit():
+                        return int(answer)
+                    else: return None
 
 
     def openDirectChannel(self, username):
@@ -261,6 +279,7 @@ class SlackvarkBot:
         # decode group object to resolve ID (needed to add users)
         groupObject = groupObject.decode("utf-8")
         groupObject = json.loads(groupObject)
+        print(groupObject)
   
         if groupObject["ok"]:
             groupId = groupObject["group"]["id"]
@@ -278,9 +297,8 @@ class SlackvarkBot:
             groupId = groupObject["group"]["id"]
 
         for userName in users:
-            if(userName[-1] == ":"):
-                userName = userName[:-1]  # strip the colon that Slack automatically adds
-                # print(userName) #DEBUG
+            userName = userName.rstrip(":")
+            # print(userName) #DEBUG
             self.client.api_call(method="groups.invite", token=human_token,
                                  channel=groupId, user=self.getUserID(userName))  # invite to group
 
@@ -291,7 +309,13 @@ class SlackvarkBot:
         return groupId
 
     def webhookPost(self, payload, url=None):
-        if(url is None):
+        """
+        Sends a POST into Slack webhook
+
+        Parameters:
+        payload (JSON Object) -- Payload to post through webhook, encoded with JSON library
+        """
+        if url:
             url = "https://hooks.slack.com/services/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"
         return requests.post(url, payload)
 
@@ -315,62 +339,55 @@ class SlackvarkBot:
 
         # rudimentary menu follows. will likely be scrapped as bot develops
         if command == "hello":  # bot listens for "hello"
-            self.in_menu = True
-            # post main options
             self.post(action["channel"], MessageConstants.MENU)
-        elif self.in_menu and command == "1":
-            self.post(action["channel"], MessageConstants.MENU_OPTION_1)
-            self.in_menu = False
-        elif self.in_menu and command == "2":
-            self.post(self.getDirectChannelID(action["user"]), "hello")
-        elif self.in_menu and command == "3":
-            self.post(action["channel"], MessageConstants.MENU_OPTION_3)
-            usernameList = self.readMessage().split()
-            self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
-            channelName = self.readMessage()
-            # post to newly-created channel
-            self.post(self.createNewGroup(usernameList, channelName),
-                      MessageConstants.CREATED_CHANNEL)
-        elif self.in_menu and command == "4":
-            self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
-            channelName = self.readMessage()
-            self.post(self.createNewGroup([], channelName), MessageConstants.CREATED_CHANNEL)
-            
-            payload = {
-                    "text" : self.getUserName(action["user"]) + " " +\
-                    channelName + " " + "T0K6H0Q8N/B0NCLNQNQ/1W8CAOsVNkZwMtq1gmWyhBfy",
-                    "channel" : "@aaron",
-                    "username" : "temp"
-                    }
-            payload = json.JSONEncoder().encode(payload)
-            r = self.webhookPost(payload)
-            # r = requests.post(
-            #         "https://hooks.slack.com/services/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",
-            #         data=payload
-            #         )
-            
-            to_send = ""
-            while True:
-                response = self.client.rtm_read()
-                for item in response:
-                    if "type" in item and item["type"] == "message" and \
-                            "user" in item and item["user"] != self.getUserID("slackvark_bot") and \
-                            item["channel"] == self.getGroupID(channelName):
-                        to_send = item["text"].lower().strip()
-                        payload = {
-                                "text" : to_send,
-                                "channel" : "#" + channelName,
-                                "username" : self.getUserName(item["user"]),
-                                "icon_emoji" : ":electric_plug:"
-                                }
-                        payload = json.JSONEncoder().encode(payload)
-                        r = self.webhookPost(payload)
 
-        #This will stop the invalid selection bug
-        elif self.in_menu:
-            self.post(action["channel"], "Invalid Selection.")
+            userSelection = self.readMenuSelection()
+            if userSelection == 1:
+                self.post(action["channel"], MessageConstants.MENU_OPTION_1)
+            elif userSelection == 2:
+                self.post(self.getDirectChannelID(action["user"]), "hello")
+            elif userSelection == 3:
+                self.post(action["channel"], MessageConstants.MENU_OPTION_3)
+                usernameList = self.readMessage().split()
+                self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
+                channelName = self.readMessage()
+                # post to newly-created channel
+                self.post(self.createNewGroup(usernameList, channelName),
+                        MessageConstants.CREATED_CHANNEL)
+            elif userSelection == 4:
+                self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
+                channelName = self.readMessage()
+                self.post(self.createNewGroup([], channelName), MessageConstants.CREATED_CHANNEL)
+                
+                payload = {
+                        "text" : self.getUserName(action["user"]) + " " +\
+                        channelName + " " + "T0K6H0Q8N/B0NCLNQNQ/1W8CAOsVNkZwMtq1gmWyhBfy",
+                        "channel" : "@aaron",
+                        "username" : "temp"
+                        }
+                payload = json.JSONEncoder().encode(payload)
+                r = self.webhookPost(payload)
+                
+                to_send = ""
+                while True:
+                    response = self.client.rtm_read()
+                    for item in response:
+                        if "type" in item and item["type"] == "message" and \
+                                "user" in item and item["user"] != self.getUserID("slackvark_bot") and \
+                                item["channel"] == self.getGroupID(channelName):
+                            to_send = item["text"].lower().strip()
+                            payload = {
+                                    "text" : to_send,
+                                    "channel" : "#" + channelName,
+                                    "username" : self.getUserName(item["user"]),
+                                    "icon_emoji" : ":electric_plug:"
+                                    }
+                            payload = json.JSONEncoder().encode(payload)
+                            r = self.webhookPost(payload)
 
-    
+            else:
+                self.post(action["channel"], "Invalid Selection.")
+ 
 
     def processDMLegal(self, action):
         """
