@@ -192,6 +192,7 @@ class SlackvarkBot:
 
         if userObjects["ok"]:
             for user in userObjects["members"]:
+                # print(user["name"], "vs.", username)
                 if user["name"] == username:  # if found user
                     return user["id"]  # return user ID
             else:
@@ -279,7 +280,7 @@ class SlackvarkBot:
         # decode group object to resolve ID (needed to add users)
         groupObject = groupObject.decode("utf-8")
         groupObject = json.loads(groupObject)
-        print(groupObject)
+        print(json.dumps(groupObject, sort_keys=False, indent=4), end='\n\n')
   
         if groupObject["ok"]:
             groupId = groupObject["group"]["id"]
@@ -408,14 +409,15 @@ class SlackvarkBot:
                 }
         """
         commandList = action["text"].strip().split() # retrieve actual text of message
-        self.createNewGroup(commandList[0].lower(), commandList[1].lower())
+        self.createNewGroup([commandList[0].lower()], commandList[1].lower())
 
         hookURL = 'https://hooks.slack.com/services/' + commandList[2]
         to_send = ""
         while True:
             response = self.client.rtm_read()
             for item in response:
-                if ("type" in item and item["type"] == "message") and ("user" in item and item["user"] != self.getUserID("aaron")): #and item["channel"] == self.getGroupID(commandList[1]):
+                if ("type" in item and item["type"] == "message") and \
+                        ("user" in item and item["user"] != self.getUserID("aaron")): #and item["channel"] == self.getGroupID(commandList[1]):
                     to_send = item["text"].lower().strip()
                     payload = {
                             "text" : item["text"],
@@ -429,6 +431,8 @@ class SlackvarkBot:
 
 if __name__ == "__main__":
     inLegalSlack = False
+    if len(sys.argv) > 1 and sys.argv[1] == "legal":
+        inLegalSlack = True
     config = configparser.ConfigParser()
     config.read("creds.cfg") # read creds file
     if not inLegalSlack:
