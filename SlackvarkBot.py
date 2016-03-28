@@ -315,7 +315,7 @@ class SlackvarkBot:
         Parameters:
         payload (JSON Object) -- Payload to post through webhook, encoded with JSON library
         """
-        if url:
+        if not url:
             url = "https://hooks.slack.com/services/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"
         return requests.post(url, payload)
 
@@ -357,7 +357,12 @@ class SlackvarkBot:
             elif userSelection == 4:
                 self.post(action["channel"], MessageConstants.PROMPT_CHANNEL)
                 channelName = self.readMessage()
-                self.post(self.createNewGroup([], channelName), MessageConstants.CREATED_CHANNEL)
+                userList = []
+                userList.append(self.getUserName(action["user"]))
+                createdGroupID = self.createNewGroup(userList, channelName)
+                if not createdGroupID:
+                    return
+                self.post(createdGroupID, MessageConstants.CREATED_CHANNEL)
                 
                 payload = {
                         "text" : self.getUserName(action["user"]) + " " +\
@@ -372,6 +377,7 @@ class SlackvarkBot:
                 while True:
                     response = self.client.rtm_read()
                     for item in response:
+                        print(json.dumps(item, sort_keys=False, indent=4), end='\n\n')
                         if "type" in item and item["type"] == "message" and \
                                 "user" in item and item["user"] != self.getUserID("slackvark_bot") and \
                                 item["channel"] == self.getGroupID(channelName):
