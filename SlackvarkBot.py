@@ -6,6 +6,35 @@ from slackclient import SlackClient
 
 import MessageConstants
 
+class Conversation:
+    def __init__(self, name, ID):
+        self.username = name
+        self.userID = ID
+        self.status = 0 # 0 = init, 1 = user has typed 'hello', 2 = question, 3 = tag, 4 = confirmed
+        self.question = ""
+        self.tags = []
+
+    def setStatus(self, num):
+        self.status = num
+
+    def setQuestion(self, quest):
+        self.question = quest
+
+    def setTags(self, tags):
+        self.tags = tags
+
+    def getStatus(self):
+        return self.status
+
+    def getQuestion(self):
+        return self.question
+
+    def getUsername(self):
+        return self.username
+
+    def getUserID(self):
+        return self.userID
+
 
 class SlackvarkBot:
 
@@ -23,6 +52,7 @@ class SlackvarkBot:
         self.human_token = human_token
         self.inLegalSlack = inLegalSlack
         self.directChannelList = []
+        self.conversationList= []
 
     def connect(self, inLegalSlack):
         """
@@ -43,6 +73,13 @@ class SlackvarkBot:
             directIDList.append(imObj["id"])
         self.directChannelList = directIDList
 
+        userObjects = self.client.api_call(method="users.list").decode("utf-8") # list all users in slack w/API call
+        userObjects = json.loads(userObjects)
+
+        if userObjects["ok"]:
+            for user in userObjects["members"]:
+                self.conversationList.append(Conversation(user["name"], user["id"]))
+  
     # Suggested separating listener into a separate class to handle actions
     def listen(self):
         """
@@ -255,6 +292,13 @@ class SlackvarkBot:
             print("Bad response from groups.list")
         return None
 
+    def getConversationObject(self, user):
+        for objct in self.conversationList:
+            #print(type(objct))
+            if objct.getUserID() == user:
+                return objct
+    
+
     def createNewGroup(self, users, groupName):
         """
         Creates a new private channel (group) using human token.
@@ -336,33 +380,49 @@ class SlackvarkBot:
                 }
         """
         message = action["text"].lower().strip()  # retrieve actual text of message
-        # inintialize variables for private channel creation
-        # usernameList = []
-        # channelName = ""
+        userID = action["user"]
+        conversation = self.getConversationObject(userID)
 
-        # rudimentary menu follows. will likely be scrapped as bot develops
+        if (conversation.getStatus() == 0) and (action["channel"] == self.getDirectChannelID(action["user"])):
+            if message == "hello":
+                conversation.setStatus(1)
+                self.post(action["channel"], MessageConstants.MENU_OPTION_2a)
+                return
+
         #if command == "hello" and action["channel"] in self.directChannelList:  # bot listens for "hello"
-        if action["channel"] == self.getDirectChannelID(action["user"]):
+        if (conversation.getStatus() == 1) and (action["channel"] == self.getDirectChannelID(action["user"])):
             # self.post(action["channel"], MessageConstants.MENU)
             question = ""
             if message.endswith("?"):
                 self.post(action["channel"], MessageConstants.MENU_OPTION_2b)
-                question = message
+                conversation.setQuestion(message)
+                conversation.setStatus(2)
+                return
             else:
-                self.post(action["channel"], MessageConstants.MENU_OPTION_2a)
-                question = self.readMessage(False, True)
-                self.post(action["channel"], MessageConstants.MENU_OPTION_2b)
-            tagList = self.readMessage().split()
-            submitResponses = "\n*Question:* " + question + "\n*Tags:* "
+                self.post(action["channel"], "Didn't get that - try again?")
+                return
+
+                
+        if (conversation.getStatus() == 2) and (action["channel"] == self.getDirectChannelID(action["user"])):
+            # question = self.readMessage(False, True)
+            # self.post(action["channel"], MessageConstants.MENU_OPTION_2b)
+            tagList = message.split()
+            conversation.setTags(tagList)
+            submitResponses = "\n*Question:* " + conversation.getQuestion() + "\n*Tags:* "
             for tag in tagList:
                 submitResponses += tag + " "
             self.post(action["channel"], MessageConstants.MENU_OPTION_2_CONFIRMa + submitResponses)
             self.post(action["channel"], MessageConstants.MENU_OPTION_2_CONFIRMb)
-            finalConfirmation = self.readMessage()
-            if finalConfirmation == "yes":
+            conversation.setStatus(3)
+            return
+
+        if (conversation.getStatus() == 3) and (action["channel"] == self.getDirectChannelID(action["user"])):
+            if message == "yes":
                 userName = self.getUserName(action["user"])
                 channelName = "question_channel_" + userName
                 self.post(self.createNewGroup([userName], channelName), MessageConstants.CREATED_Q_CHANNEL)
+                conversation.setStatus(4)
+            return
 
             # elif userSelection == 3:
             #     self.post(action["channel"], MessageConstants.MENU_OPTION_3)
